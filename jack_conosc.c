@@ -18,6 +18,44 @@
 #include <string.h>
 #include <unistd.h>
 
+
+/**
+ * @brief Duplicate string to heap memory.
+ * @param src Source C string.
+ * @return Newly allocated copy or NULL.
+ */
+static char *xstrdup(const char *src) {
+    if (!src) {
+        return NULL;
+    }
+    size_t len = strlen(src) + 1;
+    char *dst = malloc(len);
+    if (!dst) {
+        return NULL;
+    }
+    memcpy(dst, src, len);
+    return dst;
+}
+
+/**
+ * @brief Duplicate at most @p n chars to heap memory and NUL-terminate.
+ * @param src Source byte sequence.
+ * @param n Number of chars to copy.
+ * @return Newly allocated copy or NULL.
+ */
+static char *xstrndup(const char *src, size_t n) {
+    if (!src) {
+        return NULL;
+    }
+    char *dst = malloc(n + 1);
+    if (!dst) {
+        return NULL;
+    }
+    memcpy(dst, src, n);
+    dst[n] = '\0';
+    return dst;
+}
+
 /** @brief Default OSC UDP port (listen + reply). */
 #define DEFAULT_OSC_PORT "50420"
 /** @brief JACK client name used to register with JACK server. */
@@ -191,8 +229,8 @@ static int split_port_name(const char *full, char **client, char **port_short) {
     }
 
     size_t clen = (size_t)(sep - full);
-    *client = strndup(full, clen);
-    *port_short = strdup(sep + 1);
+    *client = xstrndup(full, clen);
+    *port_short = xstrdup(sep + 1);
     if (!*client || !*port_short) {
         free(*client);
         free(*port_short);
@@ -222,7 +260,7 @@ static client_ports_t *find_or_add_client(client_list_t *list, const char *name)
 
     client_ports_t *entry = &list->items[list->count];
     memset(entry, 0, sizeof(*entry));
-    entry->name = strdup(name);
+    entry->name = xstrdup(name);
     if (!entry->name) {
         return NULL;
     }
@@ -245,7 +283,7 @@ static int add_port_to_client(client_ports_t *client, const char *full_name, boo
             return -1;
         }
         client->inputs = new_arr;
-        client->inputs[client->num_inputs] = strdup(full_name);
+        client->inputs[client->num_inputs] = xstrdup(full_name);
         if (!client->inputs[client->num_inputs]) {
             return -1;
         }
@@ -258,7 +296,7 @@ static int add_port_to_client(client_ports_t *client, const char *full_name, boo
         return -1;
     }
     client->outputs = new_arr;
-    client->outputs[client->num_outputs] = strdup(full_name);
+    client->outputs[client->num_outputs] = xstrdup(full_name);
     if (!client->outputs[client->num_outputs]) {
         return -1;
     }
