@@ -61,3 +61,29 @@ Show help:
   - Creates a connection from output channel to input channel
   - Success: `/ok connection <fromname> <fromchannum> <toname> <tochannum>`
   - Error: `/error <message>`
+
+- Request: `/disconnect <fromname> <fromchannum> <toname> <tochannum>`
+  - Removes an existing connection from output channel to input channel
+  - Success: `/ok disconnect <fromname> <fromchannum> <toname> <tochannum>`
+  - Error: `/error <message>`
+
+## OSC Usage Examples
+
+Using `oscsend` (from liblo-tools):
+
+```bash
+# Query all JACK clients and channel counts
+oscsend localhost 50420 /get_clients_all
+
+# Query all active JACK connections
+oscsend localhost 50420 /get_connections_all
+
+# Query all outgoing connections for one client
+oscsend localhost 50420 /connection s system
+
+# Connect system:out_1 -> myclient:in_1 (by channel index)
+oscsend localhost 50420 /connection sisi system 1 myclient 1
+
+# Disconnect system:out_1 -> myclient:in_1
+oscsend localhost 50420 /disconnect sisi system 1 myclient 1
+```

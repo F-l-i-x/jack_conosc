@@ -117,8 +117,20 @@ static void print_usage(FILE *stream, const char *prog) {
             "\n"
             "Options:\n"
             "  -p, --port <1-65535>  OSC UDP port for listen and replies (default: %s)\n"
-            "  -h, --help            Show this help and exit\n",
-            prog, DEFAULT_OSC_PORT);
+            "  -h, --help            Show this help and exit\n"
+            "\n"
+            "OSC endpoints:\n"
+            "  /get_clients_all\n"
+            "  /get_connections_all\n"
+            "  /connection <clientname>\n"
+            "  /connection <fromname> <fromchannum> <toname> <tochannum>\n"
+            "  /disconnect <fromname> <fromchannum> <toname> <tochannum>\n"
+            "\n"
+            "Examples (oscsend):\n"
+            "  oscsend localhost %s /get_clients_all\n"
+            "  oscsend localhost %s /connection sisi system 1 myclient 1\n"
+            "  oscsend localhost %s /disconnect sisi system 1 myclient 1\n",
+            prog, DEFAULT_OSC_PORT, DEFAULT_OSC_PORT, DEFAULT_OSC_PORT, DEFAULT_OSC_PORT);
 }
 
 /**
@@ -674,6 +686,70 @@ static int handle_connection_set(const char *path, const char *types, lo_arg **a
 }
 
 /**
+ * @brief Handle OSC `/disconnect <from> <fromch> <to> <toch>`.
+ */
+static int handle_disconnect_set(const char *path, const char *types, lo_arg **argv,
+                                 int argc, lo_message data, void *user_data) {
+    (void)path;
+    (void)argc;
+    (void)user_data;
+
+    if (!types || strcmp(types, "sisi") != 0) {
+        send_error(data, "invalid args for /disconnect");
+        return 0;
+    }
+
+    const char *from_name = &argv[0]->s;
+    int from_ch = argv[1]->i;
+    const char *to_name = &argv[2]->s;
+    int to_ch = argv[3]->i;
+
+    if (from_ch < 1 || to_ch < 1) {
+        send_error(data, "channel numbers must be >= 1");
+        return 0;
+    }
+
+    client_list_t list;
+    if (build_client_list(g_app.jack, &list) != 0) {
+        send_error(data, "cannot enumerate JACK ports");
+        return 0;
+    }
+
+    client_ports_t *from_client = find_client(&list, from_name);
+    client_ports_t *to_client = find_client(&list, to_name);
+    if (!from_client || !to_client) {
+        free_client_list(&list);
+        send_error(data, "client not found");
+        return 0;
+    }
+
+    if (from_ch > from_client->num_outputs || to_ch > to_client->num_inputs) {
+        free_client_list(&list);
+        send_error(data, "channel out of range");
+        return 0;
+    }
+
+    const char *from_port = from_client->outputs[from_ch - 1];
+    const char *to_port = to_client->inputs[to_ch - 1];
+
+    int rc = jack_disconnect(g_app.jack, from_port, to_port);
+    if (rc != 0) {
+        free_client_list(&list);
+        send_error(data, "jack_disconnect failed");
+        return 0;
+    }
+
+    lo_address addr = reply_address_from_msg(data);
+    if (addr) {
+        lo_send(addr, "/ok", "ssisi", "disconnect", from_name, from_ch, to_name, to_ch);
+        lo_address_free(addr);
+    }
+
+    free_client_list(&list);
+    return 0;
+}
+
+/**
  * @brief Fallback handler for unknown OSC paths.
  */
 static int handle_fallback(const char *path, const char *types, lo_arg **argv,
@@ -734,6 +810,7 @@ static int init_osc(app_t *app) {
     lo_server_add_method(app->osc, "/get_connections_all", "", handle_get_connections_all, app);
     lo_server_add_method(app->osc, "/connection", "s", handle_connection_query, app);
     lo_server_add_method(app->osc, "/connection", "sisi", handle_connection_set, app);
+    lo_server_add_method(app->osc, "/disconnect", "sisi", handle_disconnect_set, app);
     lo_server_add_method(app->osc, NULL, NULL, handle_fallback, app);
     return 0;
 }
